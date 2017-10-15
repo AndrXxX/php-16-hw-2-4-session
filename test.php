@@ -131,7 +131,6 @@ if ($testReady === false && !headers_sent()) {
                   } else {
                       $additionalHint = $currentUser['name'] . ', Вы завершили тест. Количество ошибок: ' . $errorCounts . ' шт.';
                   }
-                  session_start();
                   $userScore = round($userScore, 2);
                   $_SESSION['userName'] = $currentUser['name'];
                   $_SESSION['errorCounts'] = $errorCounts;

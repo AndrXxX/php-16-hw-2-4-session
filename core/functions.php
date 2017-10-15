@@ -61,7 +61,7 @@ function login($login, $password)
  */
 function getLoginErrors()
 {
-    return $_SESSION['loginErrors'];
+    return !empty($_SESSION['loginErrors']) ? $_SESSION['loginErrors'] : null;
 }
 
 /**
