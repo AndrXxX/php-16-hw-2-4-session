@@ -1,6 +1,8 @@
 <?php
-$homeWorkNum = '2.3';
-$homeWorkCaption = 'PHP и HTML.';
+require_once 'core/functions.php';
+
+$homeWorkNum = '2.4';
+$homeWorkCaption = 'Куки, сессии и авторизация.';
 $filesPath = __DIR__ . '/uploadedFiles/';
 $additionalHint = '';
 $labelStyle = '';
@@ -12,12 +14,19 @@ $userScore = 0; /* Баллы, которые набрал тестируемы�
 $maxScore = 0; /* Максимальное количество баллов, которое можно получить */
 $errorCode = null;
 
+$currentUser = getCurrentUser();
+if (!$currentUser) {
+    /* если пользователь не залогинен - отправляем на страницу index */
+    redirect('index');
+}
+
 /* проверяем передался ли номер теста */
-if (isset($_GET['testNum'])) {
+$testNum = getParam('testNum');
+/*if (isset($_GET['testNum'])) {
     $testNum = $_GET['testNum'];
 } elseif (isset($_POST['testNum'])) {
     $testNum = $_POST['testNum'];
-}
+}*/
 /* извлекаем тест */
 if (isset($testNum)) {
     $test = getSelectedTest($testNum, $filesPath);
@@ -41,53 +50,6 @@ if ($testReady === false && !headers_sent()) {
     }
 }
 
-/* функция возвращает массив с именами json-файлов (с тестами) */
-function getNamesJson($dir)
-{
-    $array = array_diff(scandir($dir), array('..', '.'));
-    sort($array);
-    return $array;
-}
-
-/* Функция получает на входе номер теста и папку с файлами, а возращает сам тест или false */
-function getSelectedTest($testNum, $filesPath)
-{
-    if (isset($testNum) && isset($filesPath)) {
-        $testFilesList = getNamesJson($filesPath); /* список названий файлов с тестами */
-        if (count($testFilesList) > 0 && count($testFilesList) > $testNum && isset($testFilesList[$testNum])) {
-            return json_decode(file_get_contents($filesPath . $testFilesList[$testNum]), true);
-        }
-    }
-    return false;
-}
-
-/* Функция получает на входе код варианта ответа, ответ и правильные ответы и возвращает true если была допущена
-ошибка или false - если нет */
-function isError($labelName, $answer, $rightAnswers)
-{
-    if ((isset($_POST[$labelName]) && $_POST[$labelName] === $answer && !in_array($_POST[$labelName], $rightAnswers)) or
-        (in_array($answer, $rightAnswers) && isset($_POST[$labelName]) === false)) {
-        return true;
-    }
-    return false;
-}
-
-/* Функция получает на входе код варианта ответа, ответ и правильные ответы, стили для правильного и неправильного
-ответов и возвращает подходящий стиль */
-function elementStyle($labelName, $answer, $rightAnswers, $warningStyle, $rightStyle)
-{
-    if (isset($_POST[$labelName]) && $_POST[$labelName] === $answer) {
-        if (in_array($_POST[$labelName], $rightAnswers)) {
-            return $rightStyle;
-        } else {
-            return $warningStyle;
-        }
-    } elseif (in_array($answer, $rightAnswers)) {
-        return $warningStyle;
-    }
-    return '';
-}
-
 ?>
 
 <!DOCTYPE html>
@@ -98,136 +60,137 @@ function elementStyle($labelName, $answer, $rightAnswers, $warningStyle, $rightS
     <link rel="stylesheet" href="./css/styles.css">
   </head>
   <body>
-    <h1>Интерфейс прохождения выбранного теста</h1>
+    <header>
+      <div class="container">
+        <p class="greet">Здравствуйте, <?= $currentUser['name'] ?>!</p>
+        <a class="logout" href="./logout.php">Выход</a>
+      </div>
+    </header>
+    <div class="container main">
+      <h1>Интерфейс прохождения выбранного теста</h1>
 
-    <form method="post" enctype="multipart/form-data">
-
-      <?php if ($testReady) : ?>
-      <p>
-        <label>Ваше имя: <input type="text" placeholder="Введите здесь Ваше имя" name="UserName"
-                                value="<?= (isset($_POST['UserName'])) ? $_POST['UserName'] : '' ?>">
-        </label>
-      </p>
-      <?php endif; ?>
-
-      <fieldset>
-        <legend><?= ($testReady && isset($test) ? $test['testName'] : 'Тесты') ?></legend>
-
-        <?php
-        if ($testReady && isset($test)) {
-            $needChecked = '';
-            foreach ($test['questions'] as $questionNum => $question):
-                $questionType = ($question['type'] === 'single' ? 'radio' : 'checkbox');
-                $i = 0;
-        ?>
+      <form method="post" enctype="multipart/form-data">
 
         <fieldset>
-          <legend><?= $question['question'] ?></legend>
+          <legend><?= ($testReady && isset($test) ? $test['testName'] : 'Тесты') ?></legend>
 
           <?php
-                foreach ($question['answers'] as $answerNum => $answer):
-                    ++$i;
-                    $labelName = ($question['type'] === 'single' ? $questionNum : $questionNum . '|' . $answerNum);
-                    /*Если label - это чекбокс, то делаем имя в таком формате: "вопрос + | + № ответа", иначе - только имя вопроса.
-                    Это нужно для правильной работы переключателей и передачи параметров для проверки теста */
-
-                    $needChecked = ((!isset($_POST['ShowTestResults']) && $i === 1 && $questionType === 'radio') ||
-                    (isset($_POST['ShowTestResults']) && isset($_POST[$labelName]) && $_POST[$labelName] === $answer) ? 'Checked' : '');
-                    /* Расставляем галки/радио-кнопки правильно: если кнопка ShowTestResults не была нажата, то для первых
-                    элементов типа radio, ставим атрибут Checked, если кнопка была нажата - загружаем как было установлено
-                    пользователем */
-
-                    if (isset($_POST['ShowTestResults']) && !empty($_POST['UserName'])) {
-                        /* если нажали кнопку ShowTestResults и имя заполнено */
-
-                        $labelStyle = elementStyle($labelName, $answer, $question['rightAnswers'], $warningStyle, $rightStyle);
-                        /* определяем стиль элемента (в зависимости от наличия / отсутствия ошибки) */
-
-                        if (isError($labelName, $answer, $question['rightAnswers'])) {
-                            /* если допущена ошибка - увеличиваем счетчик ошибок */
-                            $errorCounts = ++$errorCounts;
-                            $userScore = ($questionType === 'radio') ? --$userScore : $userScore - (1 / count($question['answers']));
-                            /* подсчитываем баллы - за каждый неправильный ответ отнимаем 1 балл, если в вопросе
-                            несколько ответов, то отнимаем 1 бал поделенный на количество ответов в вопросе */
-                        }
-                    }
+          if ($testReady && isset($test)) {
+              $needChecked = '';
+              foreach ($test['questions'] as $questionNum => $question):
+                  $questionType = ($question['type'] === 'single' ? 'radio' : 'checkbox');
+                  $i = 0;
           ?>
 
-          <label style="<?= $labelStyle ?>"><input type="<?= $questionType ?>" name="<?= $labelName ?>"
-                                                   value="<?= $answer ?>" <?= $needChecked ?>><?= $answer ?>
-          </label>
+          <fieldset>
+            <legend><?= $question['question'] ?></legend>
 
-          <?php endforeach; ?>
+            <?php
+                  foreach ($question['answers'] as $answerNum => $answer):
+                      ++$i;
+                      $labelName = ($question['type'] === 'single' ? $questionNum : $questionNum . '|' . $answerNum);
+                      /*Если label - это чекбокс, то делаем имя в таком формате: "вопрос + | + № ответа", иначе - только имя вопроса.
+                      Это нужно для правильной работы переключателей и передачи параметров для проверки теста */
+
+                      $needChecked = ((!isset($_POST['ShowTestResults']) && $i === 1 && $questionType === 'radio') ||
+                      (isset($_POST['ShowTestResults']) && isset($_POST[$labelName]) && $_POST[$labelName] === $answer) ? 'Checked' : '');
+                      /* Расставляем галки/радио-кнопки правильно: если кнопка ShowTestResults не была нажата, то для первых
+                      элементов типа radio, ставим атрибут Checked, если кнопка была нажата - загружаем как было установлено
+                      пользователем */
+
+                      if (isset($_POST['ShowTestResults'])) {
+                          /* если нажали кнопку ShowTestResults и имя заполнено */
+
+                          $labelStyle = elementStyle($labelName, $answer, $question['rightAnswers'], $warningStyle, $rightStyle);
+                          /* определяем стиль элемента (в зависимости от наличия / отсутствия ошибки) */
+
+                          if (isError($labelName, $answer, $question['rightAnswers'])) {
+                              /* если допущена ошибка - увеличиваем счетчик ошибок */
+                              $errorCounts = ++$errorCounts;
+                              $userScore = ($questionType === 'radio') ? --$userScore : $userScore - (1 / count($question['answers']));
+                              /* подсчитываем баллы - за каждый неправильный ответ отнимаем 1 балл, если в вопросе
+                              несколько ответов, то отнимаем 1 бал поделенный на количество ответов в вопросе */
+                          }
+                      }
+            ?>
+
+            <label style="<?= $labelStyle ?>"><input type="<?= $questionType ?>" name="<?= $labelName ?>"
+                                                     value="<?= $answer ?>" <?= $needChecked ?>><?= $answer ?>
+            </label>
+
+            <?php endforeach; ?>
+
+          </fieldset>
+
+          <?php
+              endforeach;
+              /* вывод подсказки при нажатии ShowTestResults */
+              if (isset($_POST['ShowTestResults'])) :
+                  if ($errorCounts === 0) {
+                      $additionalHint = $currentUser['name'] . ', Вы правильно ответили на все вопросы! Поздравляем!';
+                  } else {
+                      $additionalHint = $currentUser['name'] . ', Вы завершили тест. Количество ошибок: ' . $errorCounts . ' шт.';
+                  }
+                  session_start();
+                  $userScore = round($userScore, 2);
+                  $_SESSION['userName'] = $currentUser['name'];
+                  $_SESSION['errorCounts'] = $errorCounts;
+                  $_SESSION['userScore'] = $userScore;
+                  $_SESSION['maxScore'] = $maxScore;
+                  $_SESSION['testName'] = $test['testName'];
+                  $secondHint = 'Вы набрали ' . $userScore . ' баллов из ' . $maxScore . ' возможных.';
+          ?>
+
+          <hr>
+          <div class="container">
+            <img src="./core/certificate.php" alt="Сертификат">
+          </div>
+
+          <?php endif; ?>
+
+          <hr>
+
+          <?php
+          } else /* выводим ошибки если  тест не извлечен или ошибка в номере теста */ {
+              switch ($errorCode) {
+                  case 400:
+                      echo '<h2>400 Bad Request</h2>';
+                      $additionalHint = 'Не указан номер теста.';
+                      break;
+
+                  case 404:
+                      echo '<h2>404 Not Found</h2>';
+                      $additionalHint = 'Указан неправильный номер теста, или тест не найден в загруженном файле.';
+                      break;
+
+                  default:
+                      $additionalHint = 'Не удалось извлечь список тестов, попробуйте вернуться и загрузить файл заново.';
+              }
+          }
+          ?>
+
+          <p><?= $additionalHint ?></p>
+          <p><?= $secondHint ?></p>
+          <div class="container">
+
+            <?php if (isAdmin($currentUser)) : ?>
+            <input class="btn" type="submit" formaction="admin.php" name="ShowAdminForm" value="<<= Добавить тест"
+                   title="Вернуться к загрузке файла">
+            <?php endif; ?>
+
+            <input class="btn" type="submit" formaction="list.php" name="ShowListForm"
+                   value="<= Вернуться к выбору теста" title="Вернуться к загрузке тестов">
+
+            <?php if ($testReady) { ?>
+            <input type="hidden" name="testNum" value="<?= (isset($testNum) ? $testNum : 0) ?>">
+            <input class="btn btn-prime" type="submit" formaction="test.php" name="ShowTestResults"
+                   value="Проверить" title="Проверить результаты теста">
+            <?php } ?>
+          </div>
 
         </fieldset>
-
-        <?php
-            endforeach;
-            /* вывод подсказки при нажатии ShowTestResults */
-            if (isset($_POST['ShowTestResults'])) {
-                if (empty($_POST['UserName'])) {
-                    $additionalHint = 'Вы не указали имя!';
-                } else {
-                    if ($errorCounts === 0) {
-                        $additionalHint = $_POST['UserName'] . ', Вы правильно ответили на все вопросы! Поздравляем!';
-                    } else {
-                        $additionalHint = $_POST['UserName'] . ', Вы завершили тест. Количество ошибок: ' . $errorCounts . ' шт.';
-                    }
-                    session_start();
-                    $userScore = round($userScore, 2);
-                    $_SESSION['userName'] = $_POST['UserName'];
-                    $_SESSION['errorCounts'] = $errorCounts;
-                    $_SESSION['userScore'] = $userScore;
-                    $_SESSION['maxScore'] = $maxScore;
-                    $_SESSION['testName'] = $test['testName'];
-                    $secondHint = 'Вы набрали ' . $userScore . ' баллов из ' . $maxScore . ' возможных.';
-                    ?>
-
-        <img src="certificate.php" alt="Сертификат">
-
-        <?php
-                }
-            }
-        ?>
-
-        <hr>
-
-        <?php
-        } else /* выводим ошибки если  тест не извлечен или ошибка в номере теста */ {
-            switch ($errorCode) {
-                case 400:
-                    echo '<h2>400 Bad Request</h2>';
-                    $additionalHint = 'Не указан номер теста.';
-                    break;
-
-                case 404:
-                    echo '<h2>404 Not Found</h2>';
-                    $additionalHint = 'Указан неправильный номер теста, или тест не найден в загруженном файле.';
-                    break;
-
-                default:
-                    $additionalHint = 'Не удалось извлечь список тестов, попробуйте вернуться и загрузить файл заново.';
-            }
-        }
-        ?>
-
-        <p><?= $additionalHint ?></p>
-        <p><?= $secondHint ?></p>
-        <div>
-          <input type="submit" formaction="admin.php" name="ShowAdminForm" value="<<= Вернуться к загрузке файла"
-                 title="Вернуться к загрузке файла">
-          <input type="submit" formaction="list.php" name="ShowListForm" value="<= Вернуться к выбору теста"
-                 title="Вернуться к выбору теста">
-
-          <?php if ($testReady) { ?>
-            <input type="hidden" name="testNum" value="<?= (isset($testNum) ? $testNum : 0) ?>">
-            <input type="submit" formaction="test.php" name="ShowTestResults" value="Проверить"
-                   title="Проверить результаты теста">
-          <?php } ?>
-        </div>
-
-      </fieldset>
-    </form>
+      </form>
+    </div>
   </body>
 </html>
 

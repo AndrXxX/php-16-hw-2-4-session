@@ -1,9 +1,17 @@
 <?php
-$homeWorkNum = '2.3';
-$homeWorkCaption = 'PHP и HTML.';
+require_once 'core/functions.php';
+
+$homeWorkNum = '2.4';
+$homeWorkCaption = 'Куки, сессии и авторизация.';
 $filesPath = __DIR__ . '/uploadedFiles/';
 $testsReady = false;
 $additionalHint = '';
+
+$currentUser = getCurrentUser();
+if (!$currentUser) {
+    /* если пользователь не залогинен - отправляем на страницу index */
+    redirect('index');
+}
 
 /* проверяем список json файлов с тестами и собираем массив из их названий */
 $testFilesList = getNamesJson($filesPath);
@@ -16,14 +24,6 @@ if (count($testFilesList) > 0) {
     $testsReady = true;
 }
 
-/* функция возвращает массив с именами json-файлов (с тестами) */
-function getNamesJson($dir)
-{
-    $array = array_diff(scandir($dir), array('..', '.'));
-    sort($array);
-    return $array;
-}
-
 ?>
 
 <!DOCTYPE html>
@@ -34,45 +34,58 @@ function getNamesJson($dir)
     <link rel="stylesheet" href="./css/styles.css">
   </head>
   <body>
-    <h1>Интерфейс выбора варианта теста</h1>
+    <header>
+      <div class="container">
+        <p class="greet">Здравствуйте, <?= $currentUser['name'] ?>!</p>
+        <a class="logout" href="./logout.php">Выход</a>
+      </div>
+    </header>
+    <div class="container main">
+      <h1>Интерфейс выбора варианта теста</h1>
 
-    <form method="post" enctype="multipart/form-data">
-      <fieldset>
-        <?php if ($testsReady && isset($tests)) { ?>
+      <form method="post" enctype="multipart/form-data">
+        <fieldset>
+          <legend>Тесты</legend>
 
-        <legend>Выберите один из <?= count($tests) ?> вариантов теста, который вы желаете пройти:</legend>
+          <?php if ($testsReady && isset($tests)) { ?>
+          <p>Выберите один из <?= count($tests) ?> вариантов теста, который вы желаете пройти:</p>
+          <?php
+          $i = 0;
+          foreach ($tests as $testNum => $test):
+              $i++;
+              $needChecked = ($i === 1 ? 'Checked' : '');
+              ?>
 
-        <?php
-            $i = 0;
-            foreach ($tests as $testNum => $test):
-                $i++;
-                $needChecked = ($i === 1 ? 'Checked' : '');
-        ?>
+            <p><label><input type="radio" name="testNum"
+                             value="<?= $testNum ?>" <?= $needChecked ?>><?= $test ?></label></p>
 
-        <p><label><input type="radio" name="testNum"
-                         value="<?= $testNum ?>" <?= $needChecked ?>><?= $test ?></label></p>
+          <?php endforeach; ?>
 
-        <?php endforeach; ?>
+          <?php
+          } else {
+              $additionalHint = 'Не удалось извлечь список тестов, попробуйте добавить тесты (доступно только для администраторов).';
+          } ?>
+          <hr>
+          <p><?= $additionalHint ?></p>
+          <div class="container">
+            <?php if (isAdmin($currentUser)) : ?>
+            <input class="btn" type="submit" formaction="admin.php" name="ShowAdminForm" value="<= Добавить тест"
+                   title="Вернуться к загрузке тестов">
+            <?php endif; ?>
 
-        <hr>
-        <p><?= $additionalHint ?></p>
-        <div>
-          <input type="submit" formaction="admin.php" name="ShowAdminForm" value="<= Вернуться"
-                 title="Вернуться к загрузке файла">
-          <input type="submit" formaction="test.php" formmethod="get" name="ShowTest" value="Пройти тест =>"
-                 title="Перейти в выполнению выбранного теста">
-        </div>
+            <?php if (!$testsReady) : ?>
+            <input class="btn" type="submit" formaction="logout.php" name="ShowLoginForm"
+                   value="Вернуться к форме входа" title="Вернуться к форме входа">
+            <?php endif; ?>
 
-        <?php } else { ?>
+            <?php if ($testsReady) : ?>
+            <input class="btn btn-prime" type="submit" formaction="test.php" formmethod="get" name="ShowTest"
+                   value="Пройти тест =>" title="Перейти в выполнению выбранного теста">
+            <?php endif; ?>
+          </div>
 
-        <legend>Тесты</legend>
-        <p>Не удалось извлечь список тестов, попробуйте вернуться и загрузить файл заново.</p>
-        <input type="submit" formaction="admin.php" name="ShowAdminForm" value="<= Вернуться"
-               title="Вернуться к загрузке файла">
-
-        <?php } ?>
-
-      </fieldset>
-    </form>
+        </fieldset>
+      </form>
+    </div>
   </body>
 </html>

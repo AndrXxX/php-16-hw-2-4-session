@@ -1,6 +1,19 @@
 <?php
-$homeWorkNum = '2.3';
-$homeWorkCaption = 'PHP и HTML.';
+require_once 'core/functions.php';
+
+$currentUser = getCurrentUser();
+if (!$currentUser) {
+    /* если пользователь не залогинен - отправляем на страницу index */
+    redirect('index');
+}
+if (!isAdmin($currentUser)) {
+    /* если у пользователя нет прав, отправляем header */
+    header($_SERVER['SERVER_PROTOCOL'] . ' 403 Forbidden');
+    die;
+}
+
+$homeWorkNum = '2.4';
+$homeWorkCaption = 'Куки, сессии и авторизация.';
 $fileReady = false;
 $filesPath = __DIR__ . '/uploadedFiles/';
 $additionalHint = '';
@@ -63,84 +76,6 @@ if (isset($_POST['ClearFilesFolder'])) {
     $fileReady = false;
 }
 
-function checkFile($file, $filesPath)
-{
-    /* Функция возвращает true, если все в порядке или ошибку если что-то не так */
-
-    if (!isset($file['name']) or empty($file['name'])) {
-        return 'FileNotSet';
-    }
-
-    if (isset($file['type'])) {
-        if ($file['type'] !== 'application/json') {
-            return 'WrongFileType';
-        }
-
-        if ($file['error'] !== UPLOAD_ERR_OK) {
-            return 'ErrorLoading';
-        }
-    }
-
-    if (isset($file['tmp_name'])) {
-        if (in_array(hash_file('md5', $file['tmp_name']), get_hash_json($filesPath))) {
-            return 'SameFileExist';
-        }
-
-        $decodedFile = json_decode(file_get_contents($file['tmp_name']), true);
-        if (!isset($decodedFile['testName']) or !isset($decodedFile['questions'])) {
-            return 'FileStructureNotValid';
-        }
-
-        if (!move_uploaded_file($file['tmp_name'], $filesPath . setNameJson($filesPath))) {
-            return 'FileNotMoved';
-        }
-    }
-
-    return 'FileUploadOK';
-}
-
-/* функция очищения папки от файлов */
-function clearDir($dir)
-{
-    $list = array_values(getNamesJson($dir));
-    foreach ($list as $file) {
-        unlink($dir . $file);
-    }
-}
-
-/* функция сканирует папку и возвращает первое незанятое название файла 1.json, 2.json и т.д. */
-function setNameJson($dir)
-{
-    $filesList = getNamesJson($dir);
-    $fileName = (count($filesList) + 1) . '.json';
-    $i = 2;
-    while (is_file($dir . $fileName)) {
-        $fileName = (count($filesList) + $i) . '.json';
-        $i++;
-    }
-    return $fileName;
-}
-
-/* функция возвращает массив с именами json-файлов (с тестами) */
-function getNamesJson($dir)
-{
-    $array = array_diff(scandir($dir), array('..', '.'));
-    sort($array);
-    return $array;
-}
-
-/* функция возвращает массив с хешами json-файлов */
-function get_hash_json($dir)
-{
-    $hash_list = array();
-    if (count(getNamesJson($dir)) > 0) {
-        foreach (getNamesJson($dir) as $file) {
-            $hash_list[] = hash_file('md5', $dir . $file);
-        }
-    }
-    return $hash_list;
-}
-
 ?>
 
 <!DOCTYPE html>
@@ -151,48 +86,56 @@ function get_hash_json($dir)
     <link rel="stylesheet" href="./css/styles.css">
   </head>
   <body>
-    <h1>Интерфейс загрузки файла</h1>
+    <header>
+      <div class="container">
+        <p class="greet">Здравствуйте, <?= $currentUser['name'] ?>!</p>
+        <a class="logout" href="./logout.php">Выход</a>
+      </div>
+    </header>
 
-    <p>На этой странице необходимо выбрать и загрузить json-файл с тестами для дальнейшей работы.</p>
-    <p>Для этих целей можно использовать файлы: <a href="./exampleTests/english.json" download="">english.json</a>,
-      <a href="./exampleTests/multiplication.json" download="">multiplication.json</a> и
-      <a href="./exampleTests/units.json" download="">units.json</a> .</p>
-    <p>В форму загрузки встроена проверка загружаемого файла на наличие на сервере (по хешу).</p>
-    <p>Если загружаемый файл уже есть на сервере, то он не будет загружен.</p>
+    <div class="container main">
+      <h1>Интерфейс загрузки файла</h1>
+      <p>На этой странице необходимо выбрать и загрузить json-файл с тестами для дальнейшей работы. Для этих целей можно
+        использовать файлы: <a href="./exampleTests/english.json" download="">english.json</a>,
+        <a href="./exampleTests/multiplication.json" download="">multiplication.json</a> и
+        <a href="./exampleTests/units.json" download="">units.json</a>. В форму загрузки встроена проверка загружаемого
+        файла на наличие на сервере (по хешу). Если загружаемый файл уже есть на сервере, то он не будет загружен.</p>
 
-    <form method="post" action="" enctype="multipart/form-data">
+      <form method="post" action="" enctype="multipart/form-data">
 
-      <fieldset>
-        <legend>Загрузка файлов</legend>
-        <label>Файл: <input type="file" name="myFile"></label>
-        <hr>
-        <p style="<?= $additionalHintStyle ?>"><?= $additionalHint ?></p>
-        <div>
-          <input type="submit" name="LoadFileToServer" value="Отправить новый файл на сервер">
-        </div>
-      </fieldset>
+        <fieldset>
+          <legend>Загрузка файлов</legend>
+          <label>Файл: <input class="btn" type="file" name="myFile"></label>
+          <hr>
+          <p style="<?= $additionalHintStyle ?>"><?= $additionalHint ?></p>
+          <div class="container">
+            <input class="btn btn-prime" type="submit" name="LoadFileToServer" value="Отправить новый файл на сервер">
+          </div>
+        </fieldset>
 
-      <?php if ($fileReady) { ?>
-      <fieldset>
-        <legend>Список файлов</legend>
-        <p>Json-файлы с тестами, загруженные на сервер:</p>
+        <?php if ($fileReady) { ?>
+          <fieldset>
+            <legend>Список файлов</legend>
+            <p>Json-файлы с тестами, загруженные на сервер:</p>
 
-        <ul>
-        <?php foreach (getNamesJson($filesPath) as $test) : /* Выводим список файлов и названий тестов */ ?>
-          <li><?= $test . ' / ' . json_decode(file_get_contents($filesPath . $test), true)['testName'] ?></li>
-        <?php endforeach; ?>
-        </ul>
+            <ul>
+              <?php foreach (getNamesJson($filesPath) as $test) : /* Выводим список файлов и названий тестов */ ?>
+              <li><?= $test . ' / ' . json_decode(file_get_contents($filesPath . $test), true)['testName'] ?></li>
+              <?php endforeach; ?>
+            </ul>
 
-        <p>Можно перейти к выбору теста.</p>
-        <hr>
-        <div>
-          <input type="submit" name="ClearFilesFolder" value="Очистить папку"
-                 title="При нажатии папка с загруженными файлами на сервере будет очищена">
-          <input type="submit" formaction="list.php" name="ShowTestsList" value="К тестам =>"
-                 title="Перейти в выполнению тестов">
-        </div>
-      </fieldset>
-      <?php } ?>
-    </form>
+            <p>Можно перейти к выбору теста.</p>
+            <hr>
+            <div class="container">
+              <input class="btn" type="submit" name="ClearFilesFolder" value="Очистить папку"
+                     title="При нажатии папка с загруженными файлами на сервере будет очищена">
+              <input class="btn btn-prime" type="submit" formaction="list.php" name="ShowTestsList"
+                     value="К тестам =>"
+                     title="Перейти в выполнению тестов">
+            </div>
+          </fieldset>
+        <?php } ?>
+      </form>
+    </div>
   </body>
 </html>
